@@ -4,8 +4,6 @@ import { ARButton } from "https://cdn.jsdelivr.net/npm/three@0.155.0/examples/js
 
 let renderer, scene, camera;
 let sceneGroup = new THREE.Group();
-let hitTestSource = null;
-let localReferenceSpace = null;
 
 async function init() {
   // Initialize renderer
@@ -26,13 +24,11 @@ async function init() {
     20
   );
 
-  // Create AR button with hit-test feature
-  document.body.appendChild(
-    ARButton.createButton(renderer, {
-      requiredFeatures: ["hit-test"],
-      optionalFeatures: [], // Ensure dom-overlay is not requested
-    })
-  );
+  // Add AR button with mesh-detection feature
+  const button = ARButton.createButton(renderer, {
+    requiredFeatures: ["mesh-detection"],
+  });
+  document.body.appendChild(button);
 
   // Start rendering loop
   renderer.setAnimationLoop(render);
@@ -45,26 +41,13 @@ function onSessionStart() {
 
   const session = renderer.xr.getSession();
 
-  session.requestReferenceSpace("viewer").then((viewerSpace) => {
-    session
-      .requestHitTestSource({ space: viewerSpace })
-      .then((source) => {
-        hitTestSource = source;
-      })
-      .catch((error) => {
-        console.error("Failed to get hit test source:", error);
-      });
-  });
-
-  session.requestReferenceSpace("local").then((refSpace) => {
-    localReferenceSpace = refSpace;
-  });
-
   // Handle session end
   session.addEventListener("end", () => {
     console.log("Session ended");
-    hitTestSource = null;
   });
+
+  // Start processing frames
+  session.requestAnimationFrame(processFrame);
 }
 
 function render(time, frame) {
@@ -77,41 +60,61 @@ function render(time, frame) {
 
 function processFrame(time, frame) {
   const session = renderer.xr.getSession();
+  const referenceSpace = renderer.xr.getReferenceSpace();
 
-  if (hitTestSource && frame) {
-    const hitTestResults = frame.getHitTestResults(hitTestSource);
-
-    if (hitTestResults.length > 0) {
-      const hit = hitTestResults[0];
-      const pose = hit.getPose(localReferenceSpace);
-
+  // Handle mesh detection
+  if (
+    frame.worldInformation &&
+    frame.worldInformation.detectedMeshes &&
+    frame.worldInformation.detectedMeshes.size > 0
+  ) {
+    console.log("Detected meshes:", frame.worldInformation.detectedMeshes.size);
+    frame.worldInformation.detectedMeshes.forEach((mesh) => {
+      const pose = frame.getPose(mesh.meshSpace, referenceSpace);
       if (pose) {
-        console.log("Hit test detected at:", pose.transform.position);
+        console.log("Mesh detected at:", pose.transform.position);
 
-        // Create a marker at the hit position
-        const geometry = new THREE.SphereGeometry(0.05, 16, 16);
-        const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-        const marker = new THREE.Mesh(geometry, material);
-        marker.position.set(
+        // Create geometry from mesh data
+        const geometry = createGeometry(mesh.vertices, mesh.indices);
+        const material = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
+        const meshObject = new THREE.Mesh(geometry, material);
+
+        meshObject.position.set(
           pose.transform.position.x,
           pose.transform.position.y,
           pose.transform.position.z
         );
-        sceneGroup.add(marker);
+        meshObject.quaternion.set(
+          pose.transform.orientation.x,
+          pose.transform.orientation.y,
+          pose.transform.orientation.z,
+          pose.transform.orientation.w
+        );
 
-        // Save the scene if desired
-        if (sceneGroup.children.length > 0) {
-          console.log("Saving scene to OBJ...");
-          saveSceneAsOBJ();
-          session.end();
-        }
+        sceneGroup.add(meshObject);
       }
-    } else {
-      console.log("No hit test results");
-    }
+    });
   } else {
-    console.log("Hit test source not available");
+    console.log("No meshes detected");
   }
+
+  // If we have data, save to OBJ
+  if (sceneGroup.children.length > 0) {
+    console.log("Saving scene to OBJ...");
+    saveSceneAsOBJ();
+    session.end();
+  } else {
+    console.log("No objects in sceneGroup yet");
+    session.requestAnimationFrame(processFrame);
+  }
+}
+
+function createGeometry(vertices, indices) {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(vertices), 3));
+  geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(indices), 1));
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 function saveSceneAsOBJ() {
