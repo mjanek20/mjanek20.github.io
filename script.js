@@ -6,13 +6,13 @@ let renderer;
 let sceneGroup = new THREE.Group();
 
 async function init() {
-  // Inicjalizacja renderera
+  // Initialize renderer
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.xr.enabled = true;
 
-  // Dodanie przycisku AR
+  // Add AR button
   const button = ARButton.createButton(renderer, { 
-    requiredFeatures: ["plane-detection", "mesh-detection"] 
+    requiredFeatures: ["plane-detection"] // Adjust features as necessary
   });
   document.body.appendChild(button);
 
@@ -24,23 +24,20 @@ async function onSessionStart() {
 
   const session = renderer.xr.getSession();
 
-  // Sprawdź obsługiwane funkcje
-  const supportedFeatures = session.getSupportedFeatures();
-  console.log("Supported features:", supportedFeatures);
-
-  if (!supportedFeatures.has("plane-detection")) {
+  // Check for supported features
+  if (!session.isFeatureEnabled("plane-detection")) {
     console.error("plane-detection not supported on this device");
   }
-  if (!supportedFeatures.has("mesh-detection")) {
+  if (!session.isFeatureEnabled("mesh-detection")) {
     console.warn("mesh-detection not supported, skipping meshes");
   }
 
-  // Obsługa zakończenia sesji
+  // Handle session end
   session.addEventListener("end", () => {
     console.log("Session ended");
   });
 
-  // Rozpocznij przetwarzanie klatek
+  // Start processing frames
   session.requestAnimationFrame(processFrame);
 }
 
@@ -49,20 +46,24 @@ function processFrame(_, frame) {
 
   const referenceSpace = renderer.xr.getReferenceSpace();
 
-  // Obsługa wykrywania płaszczyzn
-  if (frame.detectedPlanes) {
-    console.log("Detected planes:", frame.detectedPlanes.size);
-    frame.detectedPlanes.forEach((plane) => {
+  // Handle plane detection
+  if (frame.worldInformation && frame.worldInformation.detectedPlanes) {
+    console.log("Detected planes:", frame.worldInformation.detectedPlanes.size);
+    frame.worldInformation.detectedPlanes.forEach((plane) => {
       const pose = frame.getPose(plane.planeSpace, referenceSpace);
       if (pose) {
         console.log("Plane detected at:", pose.transform.position);
 
-        // Tworzenie geometrii płaszczyzny
+        // Create plane geometry
         const geometry = new THREE.BoxGeometry(1, 0.01, 1);
         const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
         const planeMesh = new THREE.Mesh(geometry, material);
 
-        planeMesh.position.set(pose.transform.position.x, pose.transform.position.y, pose.transform.position.z);
+        planeMesh.position.set(
+          pose.transform.position.x,
+          pose.transform.position.y,
+          pose.transform.position.z
+        );
         planeMesh.quaternion.set(
           pose.transform.orientation.x,
           pose.transform.orientation.y,
@@ -77,15 +78,15 @@ function processFrame(_, frame) {
     console.log("No planes detected");
   }
 
-  // Obsługa wykrywania siatek (jeśli obsługiwane)
-  if (frame.detectedMeshes) {
-    console.log("Detected meshes:", frame.detectedMeshes.size);
-    frame.detectedMeshes.forEach((mesh) => {
+  // Handle mesh detection (if supported)
+  if (frame.worldInformation && frame.worldInformation.detectedMeshes) {
+    console.log("Detected meshes:", frame.worldInformation.detectedMeshes.size);
+    frame.worldInformation.detectedMeshes.forEach((mesh) => {
       const pose = frame.getPose(mesh.meshSpace, referenceSpace);
       if (pose) {
         console.log("Mesh detected at:", pose.transform.position);
 
-        // Tworzenie geometrii siatki
+        // Create mesh geometry
         const geometry = createGeometry(mesh.vertices, mesh.indices);
         const material = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
         const meshObject = new THREE.Mesh(geometry, material);
@@ -100,7 +101,7 @@ function processFrame(_, frame) {
     console.log("No meshes detected");
   }
 
-  // Jeśli mamy dane, zapisujemy do OBJ
+  // If we have data, save to OBJ
   if (sceneGroup.children.length > 0) {
     console.log("Saving scene to OBJ...");
     saveSceneAsOBJ();
@@ -111,7 +112,7 @@ function processFrame(_, frame) {
   }
 }
 
-// Tworzenie geometrii na podstawie danych siatki
+// Create geometry from mesh data
 function createGeometry(vertices, indices) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(vertices), 3));
@@ -120,7 +121,7 @@ function createGeometry(vertices, indices) {
   return geometry;
 }
 
-// Zapis pliku OBJ
+// Save OBJ file
 function saveSceneAsOBJ() {
   const exporter = new OBJExporter();
   const objString = exporter.parse(sceneGroup);
@@ -132,5 +133,5 @@ function saveSceneAsOBJ() {
   link.click();
 }
 
-// Uruchomienie aplikacji
+// Start the application
 init();
