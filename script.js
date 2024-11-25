@@ -9,28 +9,25 @@ async function init() {
   // Initialize renderer
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.xr.enabled = true;
+  document.body.appendChild(renderer.domElement);
 
   // Add AR button
-  const button = ARButton.createButton(renderer, { 
-    requiredFeatures: ["plane-detection"] // Adjust features as necessary
+  const button = ARButton.createButton(renderer, {
+    requiredFeatures: ["plane-detection"], // Adjust features as necessary
+    optionalFeatures: ["mesh-detection"],   // Mesh detection might be optional
   });
   document.body.appendChild(button);
 
   renderer.xr.addEventListener("sessionstart", onSessionStart);
 }
 
-async function onSessionStart() {
+function onSessionStart() {
   console.log("Session started");
 
   const session = renderer.xr.getSession();
 
-  // Check for supported features
-  if (!session.isFeatureEnabled("plane-detection")) {
-    console.error("plane-detection not supported on this device");
-  }
-  if (!session.isFeatureEnabled("mesh-detection")) {
-    console.warn("mesh-detection not supported, skipping meshes");
-  }
+  // Remove unsupported methods
+  // There's no need to check for supported features here
 
   // Handle session end
   session.addEventListener("end", () => {
@@ -41,13 +38,18 @@ async function onSessionStart() {
   session.requestAnimationFrame(processFrame);
 }
 
-function processFrame(_, frame) {
+function processFrame(time, frame) {
   console.log("Processing frame...");
 
+  const session = renderer.xr.getSession();
   const referenceSpace = renderer.xr.getReferenceSpace();
 
   // Handle plane detection
-  if (frame.worldInformation && frame.worldInformation.detectedPlanes) {
+  if (
+    frame.worldInformation &&
+    frame.worldInformation.detectedPlanes &&
+    frame.worldInformation.detectedPlanes.size > 0
+  ) {
     console.log("Detected planes:", frame.worldInformation.detectedPlanes.size);
     frame.worldInformation.detectedPlanes.forEach((plane) => {
       const pose = frame.getPose(plane.planeSpace, referenceSpace);
@@ -79,7 +81,11 @@ function processFrame(_, frame) {
   }
 
   // Handle mesh detection (if supported)
-  if (frame.worldInformation && frame.worldInformation.detectedMeshes) {
+  if (
+    frame.worldInformation &&
+    frame.worldInformation.detectedMeshes &&
+    frame.worldInformation.detectedMeshes.size > 0
+  ) {
     console.log("Detected meshes:", frame.worldInformation.detectedMeshes.size);
     frame.worldInformation.detectedMeshes.forEach((mesh) => {
       const pose = frame.getPose(mesh.meshSpace, referenceSpace);
@@ -105,10 +111,10 @@ function processFrame(_, frame) {
   if (sceneGroup.children.length > 0) {
     console.log("Saving scene to OBJ...");
     saveSceneAsOBJ();
-    renderer.xr.getSession().end();
+    session.end();
   } else {
     console.log("No objects in sceneGroup yet");
-    renderer.xr.getSession().requestAnimationFrame(processFrame);
+    session.requestAnimationFrame(processFrame);
   }
 }
 
