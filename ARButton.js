@@ -84,7 +84,7 @@ class ARButton {
             button.style.borderRadius = '8px';
             button.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
             button.style.zIndex = '9999';
-			button.style.textContent = 'DUMP ROOM MESH';
+	    button.textContent = 'DUMP ROOM MESH';
 
             button.onmouseenter = function () {
                 button.style.opacity = '0.9';
