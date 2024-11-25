@@ -5,6 +5,7 @@ import { ARButton } from "https://cdn.jsdelivr.net/npm/three@0.155.0/examples/js
 let renderer, scene, camera;
 let sceneGroup = new THREE.Group();
 let hitTestSource = null;
+let localReferenceSpace = null;
 
 async function init() {
   // Initialize renderer
@@ -17,10 +18,19 @@ async function init() {
   scene = new THREE.Scene();
   scene.add(sceneGroup);
 
+  // Define the camera
+  camera = new THREE.PerspectiveCamera(
+    70,
+    window.innerWidth / window.innerHeight,
+    0.01,
+    20
+  );
+
   // Create AR button with hit-test feature
   document.body.appendChild(
     ARButton.createButton(renderer, {
       requiredFeatures: ["hit-test"],
+      optionalFeatures: [], // Ensure dom-overlay is not requested
     })
   );
 
@@ -35,10 +45,19 @@ function onSessionStart() {
 
   const session = renderer.xr.getSession();
 
-  session.requestReferenceSpace('viewer').then((viewerSpace) => {
-    session.requestHitTestSource({ space: viewerSpace }).then((source) => {
-      hitTestSource = source;
-    });
+  session.requestReferenceSpace("viewer").then((viewerSpace) => {
+    session
+      .requestHitTestSource({ space: viewerSpace })
+      .then((source) => {
+        hitTestSource = source;
+      })
+      .catch((error) => {
+        console.error("Failed to get hit test source:", error);
+      });
+  });
+
+  session.requestReferenceSpace("local").then((refSpace) => {
+    localReferenceSpace = refSpace;
   });
 
   // Handle session end
@@ -58,14 +77,13 @@ function render(time, frame) {
 
 function processFrame(time, frame) {
   const session = renderer.xr.getSession();
-  const referenceSpace = renderer.xr.getReferenceSpace();
 
-  if (hitTestSource) {
+  if (hitTestSource && frame) {
     const hitTestResults = frame.getHitTestResults(hitTestSource);
 
     if (hitTestResults.length > 0) {
       const hit = hitTestResults[0];
-      const pose = hit.getPose(referenceSpace);
+      const pose = hit.getPose(localReferenceSpace);
 
       if (pose) {
         console.log("Hit test detected at:", pose.transform.position);
