@@ -1,6 +1,6 @@
 import * as THREE from "./three.module.js";
 import { OBJExporter } from "./OBJExporter.js";
-import { ARButton } from "https://cdn.jsdelivr.net/npm/three@0.155.0/examples/jsm/webxr/ARButton.js";
+import { ARButton } from "./ARButton.js";
 
 let renderer, scene, camera;
 let meshGroup = new THREE.Group();
